@@ -264,12 +264,15 @@
   }
 
   // ── 처음 ──
+  // 집 컴퓨터에서 직접 열었을 때만 보이는 칸: 다른 기기를 연결하는 데 필요한 웹 주소와 접속 암호
+  const outsideCard = () => (E.net.code ? '<div class="card"><h2>휴대폰 · 태블릿에서 함께 쓰려면</h2><p>그 기기에서 아래 웹 주소를 열고, <b>"집 컴퓨터 연결하기"</b>에 접속 암호를 한 번만 넣어 주세요.</p><p>웹 주소: <b>' + esc(E.net.site || '(아직 웹에 올리지 않음)') + '</b></p><p>접속 암호: <b style="font-size:22px;letter-spacing:2px">' + esc(String(E.net.code).replace(/(\d{4})(?=\d)/g, '$1 ')) + '</b></p><p class="mute">이 칸은 집 컴퓨터에서 직접 열었을 때만 보여요. 집 컴퓨터가 켜져 있을 때만 연결됩니다.</p></div>' : '');
+
   // back: 사람 고르기에서 '새로 시작하기'로 왔을 때 돌아갈 곳
   function welcome(back) {
-    const linkCard = (E.isWeb || E.net.status === 'need') && E.net.status !== 'on' ? '<div class="card"><h2>하던 공부가 있나요?</h2><p class="mute">집 컴퓨터나 다른 기기에서 하던 기록을 이어서 하려면 먼저 연결해 주세요.</p><button class="btn sub" id="link">집 컴퓨터의 기록 이어 하기</button></div>' : '';
+    const linkCard = (E.isWeb || E.net.status === 'need') && E.net.status !== 'on' ? '<div class="card"><h2>가족과 함께 쓰나요?</h2><p class="mute">집 컴퓨터와 연결하면 가족의 기록이 서로 보이고, 다른 기기에서 하던 공부도 이어져요. 접속 암호가 필요해요.</p><button class="btn sub" id="link">집 컴퓨터 연결하기</button></div>' : '';
     view('<div class="hero">' + dog(72) + '<div><h1>차근차근 수학</h1><div class="sub">모르는 곳부터 하나씩, 하루 15분</div></div></div>' +
       '<div class="card"><h2>이름이 뭐야?</h2><p>앞으로 같이 공부할 멍멍이야. 이름을 알려 줘!</p><input type="text" id="name" maxlength="8" placeholder="이름" autocomplete="off"><br><br><button class="btn" id="go">시작하기</button></div>' +
-      (back ? '<button class="btn sub" id="back">← 돌아가기</button>' : linkCard));
+      (back ? '<button class="btn sub" id="back">← 돌아가기</button>' : linkCard + outsideCard()));
     screen = back ? '' : 'welcome';
     const go = () => { const n = $('#name').value.trim(); if (!n) { $('#name').focus(); return; } E.newMember(n); diagIntro(); };
     on('#go', go);
@@ -298,7 +301,7 @@
     view('<div class="hero">' + dog(72) + '<div><h1>누가 공부할까?</h1><div class="sub">자기 이름을 눌러 줘</div></div></div>' +
       '<div class="card">' + list.map(m => '<button class="who' + (S.name && m.sum.id === S.sid ? ' me' : '') + '" data-id="' + esc(m.sum.id) + '" data-home="' + (m.home ? 1 : 0) + '"><b>' + esc(m.sum.name) + '</b><span>Lv.' + m.sum.lv + ' · ★ ' + m.sum.done + (m.home ? '' : ' · 이 기기에만 있는 기록') + '</span></button>').join('') +
       '<p id="wmsg" class="mute"></p><button class="btn sub" id="new">+ 새로 시작하기</button></div>' +
-      (back ? '<button class="btn sub" id="back" style="margin-bottom:16px">← 돌아가기</button>' : '') + linkCard);
+      (back ? '<button class="btn sub" id="back" style="margin-bottom:16px">← 돌아가기</button>' : '') + linkCard + outsideCard());
     screen = back ? '' : 'welcome';
     let busy = false;
     $$('.who').forEach(b => {
