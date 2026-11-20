@@ -496,6 +496,8 @@
 
       '<div class="card"><h2>선생님께 한 질문</h2><p class="mute">아이가 "질문하기"를 누르면 집 컴퓨터의 Claude Code가 답합니다. 집 컴퓨터가 켜져 있을 때만 되고, 주고받은 내용은 여기에 남습니다.' + (net.status === 'on' ? ' 오늘 남은 질문 횟수: ' + net.tutor.left + '번' : '') + '</p>' + (asks || '<p class="mute">아직 없어요.</p>') + '</div>' +
 
+      (net.code ? '<div class="card"><h2>집 밖에서 쓰기</h2><p>웹 주소: <b>' + esc(net.site || '(아직 웹에 올리지 않음)') + '</b></p><p>접속 암호: <b style="font-size:22px;letter-spacing:2px">' + esc(String(net.code).replace(/(\d{4})(?=\d)/g, '$1 ')) + '</b></p><p class="mute">아이 기기에서 웹 주소를 열고 "집 컴퓨터 연결"에 이 암호를 한 번만 넣으면, 기록이 이어지고 질문하기를 쓸 수 있어요. 이 칸은 집 컴퓨터에서 직접 열었을 때만 보입니다. 이 컴퓨터가 켜져 있고 앱(start.bat)이 실행 중일 때만 연결됩니다.</p></div>' : '') +
+
       '<div class="card"><h2>설정</h2><p class="mute">저장 위치: ' + netText + '</p>' +
       (net.status === 'need' ? '<button class="btn sub" id="link" style="margin-bottom:12px">집 컴퓨터 연결하기 (접속 암호)</button>' : net.status === 'off' ? '<button class="btn sub" id="retry" style="margin-bottom:12px">집 컴퓨터에 다시 연결해 보기</button>' : '') +
       '<div class="row"><button class="btn sub" id="snd">소리: ' + (S.settings.sound ? '켜짐' : '꺼짐') + '</button><button class="btn sub" id="rename">이름 바꾸기</button></div><br><div class="row"><button class="btn sub" id="rediag">진단 다시 하기</button><button class="btn sub" id="reset">기록 모두 지우기</button></div></div>');

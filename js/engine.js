@@ -54,6 +54,7 @@
       if (!j || j.app !== 'study-app') return false;
       const was = N.status;
       N.base = base; N.status = j.auth === 'need' ? 'need' : 'on'; N.tutor = j.tutor || N.tutor;
+      N.code = j.code || ''; N.site = j.site || '';   // 집 컴퓨터에서 직접 열었을 때만 온다
       // 새로 연결되면, 기록을 맞춰 보기 전에는 서버에 덮어쓰지 않는다
       if (N.status === 'on' && was !== 'on') { N.synced = false; N.pendingSync = true; }
       return true;
