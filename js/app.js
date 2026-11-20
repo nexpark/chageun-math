@@ -255,7 +255,7 @@
       if (code.length < 4 || going) { $('#code').focus(); return; }
       going = true; msg('연결하는 중…');
       const r = await E.login(code);
-      if (r === 'ok') { await E.sync(); return home(); }
+      if (r === 'ok') { await E.sync(); return E.net.needPick ? pick(home) : home(); }
       going = false;
       if ($('#lmsg')) msg(r === 'bad' ? '암호가 달라요. 다시 확인해 주세요.' : r === 'wait' ? '여러 번 틀려서 잠시 막혔어요. 15분쯤 뒤에 다시 해 주세요.' : OFF);
     };
@@ -264,21 +264,63 @@
   }
 
   // ── 처음 ──
-  function welcome() {
+  // back: 사람 고르기에서 '새로 시작하기'로 왔을 때 돌아갈 곳
+  function welcome(back) {
+    const linkCard = (E.isWeb || E.net.status === 'need') && E.net.status !== 'on' ? '<div class="card"><h2>하던 공부가 있나요?</h2><p class="mute">집 컴퓨터나 다른 기기에서 하던 기록을 이어서 하려면 먼저 연결해 주세요.</p><button class="btn sub" id="link">집 컴퓨터의 기록 이어 하기</button></div>' : '';
     view('<div class="hero">' + dog(72) + '<div><h1>차근차근 수학</h1><div class="sub">모르는 곳부터 하나씩, 하루 15분</div></div></div>' +
       '<div class="card"><h2>이름이 뭐야?</h2><p>앞으로 같이 공부할 멍멍이야. 이름을 알려 줘!</p><input type="text" id="name" maxlength="8" placeholder="이름" autocomplete="off"><br><br><button class="btn" id="go">시작하기</button></div>' +
-      (E.isWeb || E.net.status === 'need' ? '<div class="card"><h2>하던 공부가 있나요?</h2><p class="mute">집 컴퓨터나 다른 기기에서 하던 기록을 이어서 하려면 먼저 연결해 주세요.</p><button class="btn sub" id="link">집 컴퓨터의 기록 이어 하기</button></div>' : ''));
-    screen = 'welcome';
-    const go = () => { const n = $('#name').value.trim(); if (!n) { $('#name').focus(); return; } E.state().name = n; E.save(); diagIntro(); };
+      (back ? '<button class="btn sub" id="back">← 돌아가기</button>' : linkCard));
+    screen = back ? '' : 'welcome';
+    const go = () => { const n = $('#name').value.trim(); if (!n) { $('#name').focus(); return; } E.newMember(n); diagIntro(); };
     on('#go', go);
+    on('#back', back);
     on('#link', () => linkFlow(home));
     $('#name').onkeydown = e => { if (e.key === 'Enter') go(); };
+  }
+
+  // ── 누가 공부할까 (가족이 함께 쓴다) ──
+  // 아직 누가 공부하는지 모를 때: 가족이나 이 기기에 남은 기록이 있으면 고르게 하고, 없으면 이름을 묻는다
+  let entering = 0;
+  async function enter() {
+    const my = ++entering, locals = E.localMembers();
+    if (E.net.status === 'on') view('<div class="loading">불러오는 중…</div>');
+    const fam = await E.family();
+    if (my !== entering || E.state().name) return;
+    if ((fam && fam.length) || locals.length) who(fam, locals); else welcome();
+  }
+  const pick = async back => who(await E.family(), E.localMembers(), back);
+  // fam: 집 컴퓨터에 있는 가족(없으면 null), locals: 이 기기에 남은 기록, back: 돌아갈 곳(없으면 꼭 골라야 한다)
+  function who(fam, locals, back) {
+    keyHandler = null;
+    const S = E.state(), list = (fam || []).map(m => ({ sum: E.summary(m), home: true }));
+    locals.forEach(s => { if (!list.some(m => m.sum.id === s.sid)) list.push({ sum: E.summary(s), home: false }); });
+    const linkCard = E.isWeb && E.net.status !== 'on' ? '<div class="card"><p class="mute">집 컴퓨터와 연결하면 가족 모두의 기록이 보여요.</p><button class="btn sub" id="link">집 컴퓨터 연결하기</button></div>' : '';
+    view('<div class="hero">' + dog(72) + '<div><h1>누가 공부할까?</h1><div class="sub">자기 이름을 눌러 줘</div></div></div>' +
+      '<div class="card">' + list.map(m => '<button class="who' + (S.name && m.sum.id === S.sid ? ' me' : '') + '" data-id="' + esc(m.sum.id) + '" data-home="' + (m.home ? 1 : 0) + '"><b>' + esc(m.sum.name) + '</b><span>Lv.' + m.sum.lv + ' · ★ ' + m.sum.done + (m.home ? '' : ' · 이 기기에만 있는 기록') + '</span></button>').join('') +
+      '<p id="wmsg" class="mute"></p><button class="btn sub" id="new">+ 새로 시작하기</button></div>' +
+      (back ? '<button class="btn sub" id="back" style="margin-bottom:16px">← 돌아가기</button>' : '') + linkCard);
+    screen = back ? '' : 'welcome';
+    let busy = false;
+    $$('.who').forEach(b => {
+      b.onclick = async () => {
+        if (busy) return;
+        busy = true;
+        const ok = await E.switchTo(b.dataset.id);
+        if (!ok) { busy = false; if ($('#wmsg')) $('#wmsg').textContent = '기록을 불러오지 못했어. 집 컴퓨터가 켜져 있는지 확인해 줘.'; return; }
+        // 이 기기에만 있던 기록을 골랐으면 집 컴퓨터의 가족으로 올린다
+        if (b.dataset.home !== '1' && E.net.status === 'on') E.register();
+        home();
+      };
+    });
+    on('#new', () => welcome(() => who(fam, locals, back)));
+    on('#back', back);
+    on('#link', () => linkFlow(home));
   }
 
   function diagIntro() {
     const name = esc(E.state().name);
     view('<div class="hero">' + dog(72) + '<div><h1>어디서부터 시작할까?</h1><div class="sub">' + name + '에게 딱 맞는 출발점 찾기</div></div></div>' +
-      '<div class="card"><h2>이건 시험이 아니야</h2><ul class="plan"><li>점수를 매기지 않아. <b>어디서부터 공부하면 좋을지</b> 찾는 거야.</li><li>모르는 문제는 찍지 말고 <b>"모르겠어요"</b>를 눌러. 그래야 딱 맞는 곳에서 시작할 수 있어.</li><li>맞았는지 틀렸는지는 알려 주지 않고 바로 다음 문제로 넘어가.</li><li>20~40문제쯤이야. 중간에 ✕ 를 눌러 쉬었다가 이어서 해도 돼.</li><li>연습장과 연필을 준비하면 좋아!</li></ul><button class="btn" id="go">준비됐어!</button></div>');
+      '<div class="card"><h2>이건 시험이 아니야</h2><ul class="plan"><li>점수를 매기지 않아. <b>어디서부터 공부하면 좋을지</b> 찾는 거야.</li><li>모르는 문제는 찍지 말고 <b>"모르겠어요"</b>를 눌러. 그래야 딱 맞는 곳에서 시작할 수 있어.</li><li>맞았는지 틀렸는지는 알려 주지 않고 바로 다음 문제로 넘어가.</li><li>25~50문제쯤이야. 중간에 ✕ 를 눌러 쉬었다가 이어서 해도 돼.</li><li>연습장과 연필을 준비하면 좋아!</li></ul><button class="btn" id="go">준비됐어!</button></div>');
     on('#go', () => { if (!E.state().diag) E.diagStart(); diagLoop(); });
   }
 
@@ -314,8 +356,10 @@
     // 집 컴퓨터와 막 연결됐으면 기록을 맞춰 보고, 바뀌었으면 다시 그린다
     if (E.net.pendingSync && E.net.status === 'on') E.sync().then(changed => { if (changed && (screen === 'home' || screen === 'welcome')) home(); });
     const S = E.state();
-    if (!S.name) return welcome();
+    if (!S.name) return enter();
     const net = E.net, cur0 = E.current();
+    // 집 컴퓨터에 가족 기록이 있는데 이 기기의 기록은 아직 올라가지 않았을 때
+    const pickCard = net.needPick && net.status === 'on' ? '<div class="card"><h2>집 컴퓨터에 가족 기록이 있어</h2><p>지금은 <b>이 기기에만 있는 기록(' + esc(S.name) + ')</b>으로 공부하고 있어. 가족 가운데 누구인지 골라 줘.</p><div class="row"><button class="btn sub" id="pickfam">가족 중에서 고르기</button><button class="btn sub" id="joinfam">이 기록을 가족으로 올리기</button></div></div>' : '';
     const netChip = net.status === 'need' ? '<button class="chip link" id="link">🔑 집 컴퓨터 연결하기</button>'
       : !E.isWeb ? '' : net.status === 'on' ? '<span class="chip">🟢 집 컴퓨터 연결됨</span>' : '<span class="chip">⚪ 집 컴퓨터 꺼짐</span>';
     const lv = E.level(), streak = E.streak(), c = E.counts();
@@ -331,16 +375,58 @@
         (steps.length ? (done ? '<p>더 하고 싶으면 한 세트 더 해도 좋아.</p>' : '') + '<ul class="plan">' + items + '</ul><button class="btn ' + (done ? 'sub' : '') + '" id="start">' + (done ? '한 세트 더 하기' : '시작하기 ▶') + '</button>'
           : '<p>모든 단원을 끝냈고, 오늘은 복습할 것도 없어. 내일 또 만나!</p>') + '</div>';
     }
-    view('<div class="hero">' + dog(72) + '<div style="flex:1"><h1>안녕, ' + esc(S.name) + '!</h1><div class="chips"><span class="chip">Lv.' + lv.lv + '</span><span class="chip">🔥 ' + streak + '일 연속</span><span class="chip">★ ' + c.done + ' / ' + c.total + '</span>' + netChip + '</div><div class="xpbar"><i style="width:' + Math.round(lv.cur / lv.need * 100) + '%"></i></div></div></div>' +
-      body + '<button class="btn sub" id="askfree" style="margin-bottom:16px">🙋 멍멍이 선생님께 질문하기</button>' +
+    view('<div class="hero">' + dog(72) + '<div style="flex:1"><h1>안녕, ' + esc(S.name) + '!</h1><div class="chips"><span class="chip">Lv.' + lv.lv + '</span><span class="chip">🔥 ' + streak + '일 연속</span><span class="chip">★ ' + c.done + ' / ' + c.total + '</span>' + netChip + '<button class="chip link" id="swap">👥 사람 바꾸기</button></div><div class="xpbar"><i style="width:' + Math.round(lv.cur / lv.need * 100) + '%"></i></div></div></div>' +
+      pickCard + body + '<button class="btn sub" id="askfree" style="margin-bottom:16px">🙋 멍멍이 선생님께 질문하기</button>' +
+      '<button class="btn sub" id="fam" style="margin-bottom:16px">👪 우리 가족 공부 현황</button>' +
       '<div class="row"><button class="btn sub" id="map">단원 지도</button><button class="btn sub" id="parent">부모님 보기</button></div>');
     screen = 'home';
+    on('#swap', () => pick(home));
+    on('#fam', family);
+    on('#pickfam', () => pick(home));
+    on('#joinfam', () => { E.register(); home(); });
     on('#diag', () => (S.diag ? diagLoop() : diagIntro()));
     on('#start', () => runPlan(E.plan()));
     on('#map', map);
     on('#parent', parent);
     on('#link', () => linkFlow(home));
     on('#askfree', () => tutor({ kind: 'free', id: cur0 || '', skill: cur0 ? M.byId[cur0].name + ' (' + gradeName(M.byId[cur0].grade) + ')' : '' }));
+  }
+
+  // ── 우리 가족 공부 현황 ──
+  // 견주는 것은 수학 실력이 아니라 '꾸준히 한 만큼'이다: 이번 주에 모은 경험치와 공부한 날
+  async function family() {
+    keyHandler = null;
+    const top = '<div class="top"><button class="x" id="back">←</button><span class="lbl" style="font-size:18px">우리 가족 공부 현황</span></div>';
+    view(top + '<div class="loading">불러오는 중…</div>');
+    screen = 'fam';
+    on('#back', home);
+    const fam = await E.family();
+    if (screen !== 'fam') return;
+    const S = E.state(), list = (fam || []).map(m => E.summary(m)), mine = E.summary(S), at = list.findIndex(m => m.id === S.sid);
+    if (at >= 0) list[at] = mine; else list.push(mine);   // 내 것은 이 기기의 기록이 가장 새것이다
+    const tag = m => esc(m.name) + (m.id === S.sid ? ' <span class="metag">나</span>' : '');
+    // 이번 주 경험치: 많은 순서로 가로 막대
+    const rank = list.slice().sort((a, b) => b.week - a.week), max = Math.max(1, rank[0].week);
+    const bars = rank.map(m => '<div class="nm">' + (m.week > 0 && m.week === rank[0].week ? '👑 ' : '') + tag(m) + '</div><div class="bar" title="' + esc(m.name) + ': ' + m.week + ' 경험치"><i style="width:' + (m.week ? Math.max(2, Math.round(m.week / max * 100)) : 0) + '%"></i><b>' + m.week + '</b></div>').join('');
+    const md = d => Number(d.slice(5, 7)) + '/' + Number(d.slice(8));
+    // 최근 7일: 날마다 푼 문제 수 (많이 푼 날일수록 진하게)
+    const shade = n => (n >= 20 ? 3 : n >= 10 ? 2 : n >= 1 ? 1 : 0), WD = ['일', '월', '화', '수', '목', '금', '토'];
+    const head = mine.last7.map((x, i) => { const [y, mo, dd] = x.d.split('-').map(Number); return '<th' + (i === 6 ? ' class="now"' : '') + '>' + (i === 6 ? '오늘' : WD[new Date(y, mo - 1, dd).getDay()]) + '<small>' + md(x.d) + '</small></th>'; }).join('');
+    const rows = list.map(m => '<tr><td class="l"><b>' + tag(m) + '</b></td>' + m.last7.map(x => '<td class="h' + shade(x.n) + '" title="' + esc(m.name) + ' ' + md(x.d) + ': ' + x.n + '문제">' + (x.n || '') + '</td>').join('') + '</tr>').join('');
+    const total = M.ORDER.length;
+    const stats = list.map(m => '<tr><td class="l"><b>' + tag(m) + '</b></td><td>Lv.' + m.lv + '</td><td>' + (m.streak ? '🔥 ' + m.streak + '일' : '-') + '</td><td>★ ' + m.done + ' / ' + total + '</td></tr>').join('');
+    view(top +
+      '<div class="card"><h2>이번 주 경험치</h2><p class="mute">월요일(' + md(E.weekStart()) + ')부터 오늘까지 공부해서 모은 경험치야. 문제를 풀 때마다 쌓여!</p>' +
+      (rank[0].week ? '<div class="rank">' + bars + '</div>' : '<p>이번 주에는 아직 아무도 시작하지 않았어. 첫 번째 주인공이 되어 봐!</p>') + '</div>' +
+      '<div class="card"><h2>최근 7일</h2><p class="mute">칸의 수는 그날 푼 문제 수야. 많이 푼 날일수록 색이 진해.</p><div class="scroll"><table class="heat"><tr><th></th>' + head + '</tr>' + rows + '</table></div>' +
+      '<p class="mute legend"><span class="h1"></span> 1~9문제 <span class="h2"></span> 10~19문제 <span class="h3"></span> 20문제부터</p></div>' +
+      '<div class="card"><h2>지금까지</h2><table><tr><th></th><th>레벨</th><th>연속 공부</th><th>끝낸 단원</th></tr>' + stats + '</table>' +
+      '<p class="mute">연속 공부는 하루에 5문제부터 공부한 날로 치고, 그런 날이 며칠 이어졌는지 센 거야.</p></div>' +
+      (fam ? '' : '<div class="card"><p class="mute">지금은 이 기기의 기록만 보여요. 집 컴퓨터와 연결되면 가족 모두의 기록이 보여요.</p></div>') +
+      '<button class="btn sub" id="swap2">👥 사람 바꾸기</button>');
+    screen = 'fam';
+    on('#back', home);
+    on('#swap2', () => pick(family));
   }
 
   // ── 공부 흐름 ──
@@ -500,17 +586,17 @@
 
       '<div class="card"><h2>설정</h2><p class="mute">저장 위치: ' + netText + '</p>' +
       (net.status === 'need' ? '<button class="btn sub" id="link" style="margin-bottom:12px">집 컴퓨터 연결하기 (접속 암호)</button>' : net.status === 'off' ? '<button class="btn sub" id="retry" style="margin-bottom:12px">집 컴퓨터에 다시 연결해 보기</button>' : '') +
-      '<div class="row"><button class="btn sub" id="snd">소리: ' + (S.settings.sound ? '켜짐' : '꺼짐') + '</button><button class="btn sub" id="rename">이름 바꾸기</button></div><br><div class="row"><button class="btn sub" id="rediag">진단 다시 하기</button><button class="btn sub" id="reset">기록 모두 지우기</button></div></div>');
+      '<div class="row"><button class="btn sub" id="snd">소리: ' + (S.settings.sound ? '켜짐' : '꺼짐') + '</button><button class="btn sub" id="rename">이름 바꾸기</button></div><br><div class="row"><button class="btn sub" id="rediag">진단 다시 하기</button><button class="btn sub" id="reset">이 사람의 기록 지우기</button></div></div>');
     on('#back', home);
     on('#link', () => linkFlow(parent));
     on('#retry', () => { $('#retry').textContent = '연결하는 중…'; E.connect(true).then(() => (E.net.status === 'on' ? E.sync() : null)).then(parent); });
     on('#snd', () => { S.settings.sound = !S.settings.sound; E.save(); parent(); });
     on('#rename', () => { const n = prompt('이름', S.name); if (n && n.trim()) { S.name = n.trim().slice(0, 8); E.save(); parent(); } });
     on('#rediag', () => { if (confirm('진단을 다시 하면 단원별 별과 복습 일정이 진단 결과로 새로 정해집니다. 날짜별 기록은 남습니다. 다시 할까요?')) { S.diag = null; S.diagDone = false; E.save(); diagIntro(); } });
-    on('#reset', () => { if (confirm('모든 공부 기록을 지웁니다. 되돌릴 수 없어요. 정말 지울까요?')) { E.setState(null); E.save(); home(); } });
+    on('#reset', () => { if (confirm(S.name + '의 공부 기록을 모두 지웁니다. 다른 가족의 기록은 그대로 남아요. 정말 지울까요?')) E.removeMember().then(home); });
   }
 
-  window.__app = { home, ask, runPlan, parent, map, tutor, linkFlow };
+  window.__app = { home, ask, runPlan, parent, map, tutor, linkFlow, pick, family };
   E.onNet = () => { if (screen === 'home' || screen === 'welcome') home(); };   // 연결 상태가 바뀌면 첫 화면을 다시 그린다
   E.load().then(home);
 })();

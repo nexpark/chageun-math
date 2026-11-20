@@ -29,8 +29,10 @@
   const ls = {
     get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
     set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* 저장 공간 없음 */ } },
+    del: k => { try { localStorage.removeItem(k); } catch (e) { /* 저장 공간 없음 */ } },
   };
-  const N = { base: WEB ? null : '', status: 'off', token: ls.get(KEY + '.token'), tutor: { enabled: false, left: 0 }, synced: false, pendingSync: false };
+  // needPick: 집 컴퓨터에 가족 기록이 있는데 이 기기의 기록은 아직 올라가지 않았다 (누구로 공부할지 골라야 한다)
+  const N = { base: WEB ? null : '', status: 'off', token: ls.get(KEY + '.token'), tutor: { enabled: false, left: 0 }, synced: false, pendingSync: false, needPick: false };
   E.net = N; E.isWeb = WEB;
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   function fetchT(url, opts, ms) {
@@ -101,50 +103,117 @@
 
   // ── 저장 ──
   let timer = null;
-  // 이 기기의 기록(local)과 집 컴퓨터의 기록(remote) 가운데 어느 것을 쓸까
-  function choose(local, remote) {
-    if (!remote || !remote.v) return local;
-    if (!local) return remote;
-    // 서로 다른 기록이면 집 컴퓨터 것을 따르고, 이 기기 것은 따로 보관해 둔다
-    if (local.sid && remote.sid && local.sid !== remote.sid) {
-      if (local.name) ls.set(KEY + '.backup-' + Date.now(), JSON.stringify(local));
-      return remote;
-    }
-    if (!local.name) return remote;
-    if (!remote.name) return local;
-    return (local.updatedAt || 0) > (remote.updatedAt || 0) ? local : remote;
-  }
+  // 가족이 함께 쓰므로 기록은 사람마다 따로 둔다. sid 가 그 사람의 이름표이고, who 는 이 기기에서 지금 공부하는 사람이다.
+  // reg: 집 컴퓨터에 가족으로 올라간 기록인가 (올라간 기록만 집 컴퓨터와 맞춘다)
+  const skey = sid => KEY + '.' + sid;
+  const readLocal = sid => { try { return JSON.parse(ls.get(skey(sid)) || 'null'); } catch (e) { return null; } };
+  const keep = () => { if (S.name) { ls.set(skey(S.sid), JSON.stringify(S)); ls.set(KEY + '.who', S.sid); } };
   E.save = function () {
     S.updatedAt = Date.now();
-    ls.set(KEY, JSON.stringify(S));
+    keep();
     clearTimeout(timer);
     timer = setTimeout(E.push, 400);
   };
   E.push = function () {
-    if (typeof fetch === 'undefined' || N.status !== 'on' || !N.synced) return Promise.resolve(false);
-    return E.api('/api/state', { method: 'PUT', body: JSON.stringify(S) }).then(r => r.ok).catch(() => false);
+    if (typeof fetch === 'undefined' || N.status !== 'on' || !N.synced || !S.name || !S.reg) return Promise.resolve(false);
+    return E.api('/api/state?id=' + S.sid, { method: 'PUT', body: JSON.stringify(S) }).then(r => r.ok).catch(() => false);
   };
-  // 집 컴퓨터의 기록 읽기: 기록 · null(아직 없음) · undefined(읽지 못함)
-  E.pull = async function () {
-    try { const r = await E.api('/api/state'); if (!r.ok) return undefined; const j = await r.json(); return j && j.v ? j : null; }
+  // 집 컴퓨터에 있는 한 사람의 기록 읽기: 기록 · null(아직 없음) · undefined(읽지 못함)
+  E.pull = async function (sid) {
+    try { const r = await E.api('/api/state?id=' + sid); if (!r.ok) return undefined; const j = await r.json(); return j && j.v && j.sid === sid ? j : null; }
     catch (e) { return undefined; }
+  };
+  // 집 컴퓨터에 있는 가족들의 요약: [{ id, name, xp, done, days }] · null(읽지 못함)
+  E.family = async function () {
+    if (typeof fetch === 'undefined' || N.status !== 'on') return null;
+    try { const r = await E.api('/api/family'); if (r.status === 404) return []; if (!r.ok) return null; const j = await r.json(); return Array.isArray(j.members) ? j.members : null; }
+    catch (e) { return null; }
+  };
+  // 이 기기에 남아 있는 사람들의 기록
+  E.localMembers = function () {
+    const out = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || k.indexOf(KEY + '.') !== 0) continue;
+        try { const s = JSON.parse(localStorage.getItem(k)); if (s && s.v && s.name && skey(s.sid) === k) out.push(s); } catch (e) { /* 기록이 아닌 값 */ }
+      }
+    } catch (e) { /* 저장 공간을 못 쓰는 기기 */ }
+    return out;
   };
   // 연결된 뒤 기록 맞추기 → 화면에 보이는 기록이 바뀌었으면 true
   E.sync = async function () {
     if (N.status !== 'on') return false;
     N.pendingSync = false;
-    const remote = await E.pull();
+    if (!S.name) { N.synced = true; return false; }   // 아직 누가 공부할지 고르지 않았다
+    const remote = await E.pull(S.sid);
     if (remote === undefined || N.status !== 'on') { N.pendingSync = true; return false; }
     N.synced = true;
-    const pick = choose(S, remote);
-    if (remote && pick === remote) { E.setState(remote); ls.set(KEY, JSON.stringify(S)); return true; }
-    if (S.name) E.push();
+    if (remote) {
+      N.needPick = false;
+      if ((remote.updatedAt || 0) > (S.updatedAt || 0)) { E.setState(remote); S.reg = true; keep(); return true; }
+      if (!S.reg) { S.reg = true; keep(); }
+      E.push();
+      return false;
+    }
+    // 집 컴퓨터에 없는 기록: 그 집에 아직 아무도 없으면 첫 가족으로 올리고, 다른 가족이 있으면 누구로 공부할지 묻는다
+    if (!S.reg) {
+      const fam = await E.family();
+      if (fam === null) { N.pendingSync = true; return false; }
+      if (fam.length) { N.needPick = true; return false; }
+      S.reg = true; keep();
+    }
+    N.needPick = false;
+    E.push();
     return false;
   };
+  // 새 사람으로 시작하기
+  E.newMember = function (name) {
+    clearTimeout(timer); E.push();   // 지금 사람의 기록부터 올려 둔다
+    E.setState(null);
+    S.name = name;
+    if (N.status === 'on') { S.reg = true; N.synced = true; }
+    N.needPick = false;
+    E.save();
+    return S;
+  };
+  // 다른 사람으로 바꾸기: 그 사람의 기록(집 컴퓨터 것과 이 기기 것 가운데 새것)을 불러온다 → 바꿨으면 true
+  E.switchTo = async function (sid) {
+    clearTimeout(timer); E.push();
+    let next = readLocal(sid), remote = null;
+    if (N.status === 'on') {
+      remote = await E.pull(sid);
+      if (remote && (!next || (remote.updatedAt || 0) >= (next.updatedAt || 0))) next = remote;
+    }
+    if (!next || !next.name) return false;
+    E.setState(next);
+    if (remote) S.reg = true;
+    keep();
+    N.needPick = false;
+    if (N.status === 'on') { N.synced = true; if (S.reg) E.push(); }
+    return true;
+  };
+  // 이 기기에서만 하던 기록을 집 컴퓨터의 가족으로 올린다
+  E.register = function () { S.reg = true; N.needPick = false; if (N.status === 'on') N.synced = true; E.save(); };
+  // 지금 사람의 기록 지우기 (집 컴퓨터에서는 없애지 않고 '지운 기록'으로 옮겨 둔다)
+  E.removeMember = async function () {
+    clearTimeout(timer);
+    const sid = S.sid, named = !!S.name;
+    ls.del(skey(sid)); ls.del(KEY + '.who');
+    if (named && N.status === 'on') { try { await E.api('/api/state?id=' + sid, { method: 'DELETE', body: '{}' }); } catch (e) { /* 닿지 않음 */ } }
+    E.setState(null);
+    N.needPick = false;
+  };
   E.load = async function () {
-    let local = null;
-    try { local = JSON.parse(ls.get(KEY) || 'null'); } catch (e) { /* 깨진 기록 */ }
+    // 이 기기에서 마지막으로 공부한 사람의 기록. 예전 방식(한 사람 기록)으로 남아 있으면 이어받는다
+    const who = ls.get(KEY + '.who');
+    let local = who ? readLocal(who) : null;
+    if (!local) {
+      try { local = JSON.parse(ls.get(KEY) || 'null'); } catch (e) { /* 깨진 기록 */ }
+      if (local && local.name) ls.del(KEY); else local = null;
+    }
     E.setState(local);
+    keep();
     if (typeof fetch !== 'undefined') {
       // 연결을 잠깐만 기다리고, 늦으면 이 기기의 기록으로 먼저 시작한다 (나중에 닿으면 화면에 알린다)
       const c = E.connect(true);
@@ -267,13 +336,15 @@
 
   // ── 기록 ──
   const day = () => S.days[E.today()] || (S.days[E.today()] = { n: 0, ok: 0, sec: 0, sets: 0 });
+  // 경험치는 그날 모은 것도 함께 적어 둔다 (가족 현황판의 '이번 주 경험치')
+  const gain = x => { S.xp += x; const d = day(); d.xp = (d.xp || 0) + x; };
   // ok: 처음에 바로 맞혔는가
   E.record = function (p, ok, sec, userText) {
     const s = E.sk(p.id), d = day();
     s.hist.push([Date.now(), ok ? 1 : 0, p.lv, Math.round(sec)]);
     if (s.hist.length > 40) s.hist.shift();
     d.n++; if (ok) d.ok++; d.sec += Math.min(300, Math.round(sec));
-    S.xp += ok ? 10 : 3;
+    gain(ok ? 10 : 3);
     if (!ok) {
       S.wrong.unshift({ t: Date.now(), id: p.id, q: p.q, v: p.v || null, ua: userText || '', ca: M.ansHtml(p.a) });
       if (S.wrong.length > 40) S.wrong.pop();
@@ -287,7 +358,7 @@
     let result = 'stay';
     if (right >= total - 1) {
       // 한 문제까지 틀려도 별 하나, 모두 맞히면 별 둘 (이미 아는 단원은 빨리 지나간다)
-      s.stars = Math.min(3, s.stars + (right === total ? 2 : 1)); result = 'up'; S.xp += 30;
+      s.stars = Math.min(3, s.stars + (right === total ? 2 : 1)); result = 'up'; gain(30);
       if (s.stars === 3) { s.iv = 0; s.due = E.addDays(E.today(), IV[0]); }
     } else if (right <= total / 3) {
       result = 'again'; s.seen = false;
@@ -300,7 +371,7 @@
   E.finishReview = function (id, right, total) {
     const s = E.sk(id);
     let result;
-    if (right === total) { result = 'keep'; s.est = false; s.iv = Math.min(IV.length - 1, s.iv + 1); s.due = E.addDays(E.today(), IV[s.iv]); S.xp += 10; }
+    if (right === total) { result = 'keep'; s.est = false; s.iv = Math.min(IV.length - 1, s.iv + 1); s.due = E.addDays(E.today(), IV[s.iv]); gain(10); }
     else if (!s.est && right > 0) { result = 'soon'; s.iv = 0; s.due = E.addDays(E.today(), 1); } // 하나만 틀렸으면 내일 한 번 더 확인
     else { result = 'drop'; s.stars = s.est ? (right === 0 ? 0 : 1) : 2; s.est = false; s.due = null; s.iv = 0; if (s.stars < 2) s.seen = false; }
     E.save();
@@ -309,11 +380,26 @@
   E.markSeen = id => { E.sk(id).seen = true; E.save(); };
 
   // ── 요약 ──
-  E.streak = function () {
+  // 연속으로 공부한 날 수 (하루 5문제부터 공부한 날로 친다)
+  E.streakOf = function (days) {
     let n = 0, d = E.today();
-    if (!(S.days[d] && S.days[d].n >= 5)) d = E.addDays(d, -1);
-    while (S.days[d] && S.days[d].n >= 5) { n++; d = E.addDays(d, -1); }
+    if (!(days[d] && days[d].n >= 5)) d = E.addDays(d, -1);
+    while (days[d] && days[d].n >= 5) { n++; d = E.addDays(d, -1); }
     return n;
+  };
+  E.streak = () => E.streakOf(S.days);
+  // 이번 주의 첫날(월요일)
+  E.weekStart = function () { const [y, m, d] = E.today().split('-').map(Number); return E.addDays(E.today(), -((new Date(y, m - 1, d).getDay() + 6) % 7)); };
+  // 가족 현황판에 쓰는 한 사람의 요약. m: 이 기기의 기록 또는 집 컴퓨터가 준 요약({ id, name, xp, done, days })
+  E.summary = function (m) {
+    const days = m.days || {}, t = E.today(), xp = m.xp || 0;
+    const dayXp = d => (d ? (d.xp != null ? d.xp : d.ok * 10 + (d.n - d.ok) * 3) : 0);   // 예전 기록은 문제 수로 어림한다
+    let week = 0;
+    for (let d = E.weekStart(); d <= t; d = E.addDays(d, 1)) week += dayXp(days[d]);
+    const last7 = [];
+    for (let i = 6; i >= 0; i--) { const d = E.addDays(t, -i); last7.push({ d, n: days[d] ? days[d].n : 0 }); }
+    return { id: m.id || m.sid, name: m.name, xp, lv: Math.floor(xp / 300) + 1, week, streak: E.streakOf(days), last7, today: days[t] ? days[t].n : 0,
+      done: m.done != null ? m.done : Object.keys(m.skills || {}).filter(id => m.skills[id] && m.skills[id].stars >= 3).length };
   };
   E.level = () => ({ lv: Math.floor(S.xp / 300) + 1, cur: S.xp % 300, need: 300 });
   E.todayDone = () => { const d = S.days[E.today()]; return !!(d && d.sets >= 1); };

@@ -181,11 +181,101 @@
     return svg(300, 78, s);
   };
 
+  // ── 각 · 삼각형 · 사각형 ──
+  const rad = d => d * Math.PI / 180, BLUE = '#1565c0';
+  const seg = (x1, y1, x2, y2) => '<line x1="' + x1.toFixed(1) + '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) + '" y2="' + y2.toFixed(1) + '" stroke="' + INK + '" stroke-width="2.5" stroke-linecap="round"/>';
+  // 점 (x, y) 에서 방향 d0 → d1 (도, 오른쪽이 0, 시계 반대 방향) 사이의 각 표시. 직각이면 네모로 그린다
+  function mark(x, y, d0, d1, r) {
+    const P = (d, k) => (x + k * Math.cos(rad(d))).toFixed(1) + ' ' + (y - k * Math.sin(rad(d))).toFixed(1);
+    if (Math.abs(d1 - d0 - 90) < 0.5) {
+      const k = 13, cx = (x + k * (Math.cos(rad(d0)) + Math.cos(rad(d1)))).toFixed(1), cy = (y - k * (Math.sin(rad(d0)) + Math.sin(rad(d1)))).toFixed(1);
+      return '<path d="M' + P(d0, k) + ' L' + cx + ' ' + cy + ' L' + P(d1, k) + '" fill="none" stroke="' + INK + '" stroke-width="2"/>';
+    }
+    return '<path d="M' + P(d0, r) + ' A' + r + ' ' + r + ' 0 ' + (d1 - d0 > 180 ? 1 : 0) + ' 0 ' + P(d1, r) + '" fill="none" stroke="' + BLUE + '" stroke-width="2.5"/>';
+  }
+  // 각 안쪽에 쓰는 글자: 좁은 각일수록 꼭짓점에서 멀리 쓴다
+  function angTxt(x, y, d0, d1, s, lo, size) {
+    const m = rad((d0 + d1) / 2), R = Math.max(lo, Math.min(92, 24 / rad(Math.max(d1 - d0, 10))));
+    return txt(x + R * Math.cos(m), y - R * Math.sin(m) + 5, s, { size: size || 14, fill: BLUE });
+  }
+  // 각 하나: 오른쪽으로 뻗은 변에서 시계 반대 방향으로 deg 도 벌어진 각
+  V.angle = function (deg, label) {
+    const L = 118, ex = L * Math.cos(rad(deg)), ey = L * Math.sin(rad(deg));
+    const x = (300 - (L - Math.min(0, ex))) / 2 - Math.min(0, ex), y = Math.max(44, ey) + 12;
+    return svg(300, y + 16, mark(x, y, 0, deg, 26) + seg(x, y, x + L, y) + seg(x, y, x + ex, y - ey) + (label ? angTxt(x, y, 0, deg, label, 48) : ''));
+  };
+  // 한 점에서 나뉜 여러 각: 0 도(오른쪽)부터 total 도까지를 cuts(도)에서 나눈다. labels: 나뉜 각마다 쓸 글자 (오른쪽 것부터)
+  V.fan = function (total, cuts, labels) {
+    const L = 122, ds = [0].concat(cuts, [total]), xs = ds.map(d => L * Math.cos(rad(d))), ys = ds.map(d => L * Math.sin(rad(d)));
+    const minX = Math.min(0, ...xs), x = (300 - (Math.max(0, ...xs) - minX)) / 2 - minX, y = Math.max(40, ...ys) + 12;
+    let b = '';
+    for (let i = 0; i + 1 < ds.length; i++) b += mark(x, y, ds[i], ds[i + 1], i % 2 ? 34 : 24) + (labels[i] ? angTxt(x, y, ds[i], ds[i + 1], labels[i], 54) : '');
+    ds.forEach((d, i) => { b += seg(x, y, x + xs[i], y - ys[i]); });
+    return svg(300, y + 16, b + '<circle cx="' + x + '" cy="' + y + '" r="3.5" fill="' + INK + '"/>');
+  };
+  // 다각형. pts: 꼭짓점 (위쪽이 +, 시계 반대 방향으로), angs: 꼭짓점마다 각 글자 ('' 없음 · '∟' 직각 표시만), sides: 변(i → i+1)마다 글자, ticks: '길이가 같다'는 금을 그을 변
+  function poly(pts, angs, sides, ticks, maxH) {
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), minX = Math.min(...xs), maxY = Math.max(...ys);
+    const w = Math.max(...xs) - minX, h = maxY - Math.min(...ys), k = Math.min(190 / w, (maxH || 112) / h), ox = (300 - w * k) / 2, oy = 28;
+    const S = pts.map(p => [ox + (p[0] - minX) * k, oy + (maxY - p[1]) * k]), n = S.length;
+    const gx = S.reduce((a, p) => a + p[0], 0) / n, gy = S.reduce((a, p) => a + p[1], 0) / n;
+    const dir = (a, c) => Math.atan2(a[1] - c[1], c[0] - a[0]) * 180 / Math.PI;
+    let b = '<polygon points="' + S.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ') + '" fill="' + SOFT + '" stroke="' + INK + '" stroke-width="2.5" stroke-linejoin="round"/>';
+    S.forEach((p, i) => {
+      const nx = S[(i + 1) % n], pv = S[(i + n - 1) % n];
+      if (angs && angs[i]) {
+        let d0 = dir(p, nx), d1 = dir(p, pv);
+        if (d1 < d0) d1 += 360;
+        b += mark(p[0], p[1], d0, d1, 16) + (angs[i] === '∟' ? '' : angTxt(p[0], p[1], d0, d1, angs[i], 31, 13));
+      }
+      // 변의 가운데에서 바깥쪽으로
+      const mx = (p[0] + nx[0]) / 2, my = (p[1] + nx[1]) / 2, len = Math.hypot(nx[0] - p[0], nx[1] - p[1]);
+      let ux = (nx[1] - p[1]) / len, uy = -(nx[0] - p[0]) / len;
+      if (ux * (mx - gx) + uy * (my - gy) < 0) { ux = -ux; uy = -uy; }
+      if (ticks && ticks[i]) b += '<line x1="' + (mx - ux * 6).toFixed(1) + '" y1="' + (my - uy * 6).toFixed(1) + '" x2="' + (mx + ux * 6).toFixed(1) + '" y2="' + (my + uy * 6).toFixed(1) + '" stroke="' + INK + '" stroke-width="2.5"/>';
+      if (sides && sides[i]) b += txt(mx + ux * 16, my + uy * 16 + 5, sides[i], { size: 14, anchor: ux > 0.35 ? 'start' : ux < -0.35 ? 'end' : 'middle' });
+    });
+    return svg(300, oy + h * k + 30, b);
+  }
+  // 삼각형: 아래 왼쪽 각 A, 아래 오른쪽 각 B (도). angs: [왼쪽 아래, 오른쪽 아래, 위] 각 글자, sides: [왼쪽 변, 오른쪽 변, 아래 변], ticks: 같은 순서로 '길이가 같다'는 표시
+  V.triang = function (A, B, angs, sides, ticks) {
+    const h = 1 / (1 / Math.tan(rad(A)) + 1 / Math.tan(rad(B)));
+    return poly([[0, 0], [1, 0], [h / Math.tan(rad(A)), h]], angs, sides && [sides[2], sides[1], sides[0]], ticks && [ticks[2], ticks[1], ticks[0]], 140);   // 좁고 높은 삼각형은 조금 더 크게
+  };
+  // 사각형. kind: 'para' 평행사변형 [왼쪽 아래 각, 옆 변 ÷ 아래 변] · 'rhom' 마름모 [왼쪽 아래 각] · 'rect' 직사각형 [세로 ÷ 가로]
+  //   · 'trap' 사다리꼴 [왼쪽 아래 각, 오른쪽 아래 각] · 'gen' 보통 사각형 [왼쪽 아래, 오른쪽 아래, 오른쪽 위 각]
+  // angs: [왼쪽 아래, 오른쪽 아래, 오른쪽 위, 왼쪽 위] 각 글자, sides: [아래, 오른쪽, 위, 왼쪽] 변 글자
+  V.quadr = function (kind, P, angs, sides, ticks) {
+    const c = d => Math.cos(rad(d)), s = d => Math.sin(rad(d));
+    let pts;
+    if (kind === 'rect') pts = [[0, 0], [1, 0], [1, P[0]], [0, P[0]]];
+    else if (kind === 'trap') pts = [[0, 0], [1, 0], [1 - 0.5 / Math.tan(rad(P[1])), 0.5], [0.5 / Math.tan(rad(P[0])), 0.5]];
+    else if (kind === 'gen') {
+      // 아래 변을 1로 두고, 왼쪽 변의 길이를 바꿔 가며 네 각이 맞는 모양 가운데 네 변의 길이가 가장 고른 것을 고른다
+      const B = P[1], d1 = [c(180 - B), s(180 - B)], e = [c(B + P[2]), -s(B + P[2])], det = d1[0] * e[1] - d1[1] * e[0];
+      let best = 0;
+      pts = [[0, 0], [1, 0], [1, 0.6], [0, 0.6]];
+      for (let len = 0.3; len < 2.05; len += 0.1) {
+        const p3 = [len * c(P[0]), len * s(P[0])], rx = p3[0] - 1, ry = p3[1], t = (rx * e[1] - ry * e[0]) / det, u = (d1[0] * ry - d1[1] * rx) / det;
+        const even = Math.min(1, len, t, u) / Math.max(1, len, t, u);
+        if (t > 0 && u > 0 && even > best) { best = even; pts = [[0, 0], [1, 0], [1 + t * d1[0], t * d1[1]], p3]; }
+      }
+    } else { const r = kind === 'rhom' ? 1 : P[1]; pts = [[0, 0], [1, 0], [1 + r * c(P[0]), r * s(P[0])], [r * c(P[0]), r * s(P[0])]]; }
+    return poly(pts, angs, sides, ticks);
+  };
+
   // 그림을 말로 (선생님께 질문할 때 그림 내용을 넘기는 데 쓴다)
+  // 글자가 적힌 자리만 "이름 글자" 로 늘어놓기
+  const named = (names, vals) => names.map((nm, i) => (vals && vals[i] ? nm + ' ' + (vals[i] === '∟' ? '직각 표시' : vals[i]) : '')).filter(Boolean).join(', ');
+  const QUAD = { para: '평행사변형', rhom: '마름모', rect: '직사각형', trap: '사다리꼴', gen: '사각형' };
   V.describe = function (v) {
     if (!v) return '';
     const a = v.slice(1);
     switch (v[0]) {
+      case 'angle': return '각 하나를 그린 그림 (' + (a[1] ? '각 안에 적힌 글자: ' + a[1] : '크기는 적혀 있지 않고, 약 ' + a[0] + '도로 그려져 있음') + ')';
+      case 'fan': return (a[0] === 180 ? '직선 위의 한 점에서 선을 그어 ' : a[0] === 90 ? '직각을 ' : a[0] + '도인 각을 ') + a[2].length + '개의 각으로 나눈 그림. 오른쪽부터 차례로 적힌 글자: ' + a[2].join(', ');
+      case 'triang': return '삼각형 그림. ' + [named(['왼쪽 아래 각', '오른쪽 아래 각', '위쪽 각'], a[2]), named(['왼쪽 변', '오른쪽 변', '아래 변'], a[3])].filter(Boolean).join(' / ') + (a[4] ? ' (길이가 같다는 표시가 있는 변: ' + named(['왼쪽 변', '오른쪽 변', '아래 변'], a[4].map(t => (t ? ' ' : ''))).replace(/ +,/g, ',').trim() + ')' : '');
+      case 'quadr': return QUAD[a[0]] + ' 그림. ' + [named(['왼쪽 아래 각', '오른쪽 아래 각', '오른쪽 위 각', '왼쪽 위 각'], a[2]), named(['아래 변', '오른쪽 변', '위 변', '왼쪽 변'], a[3])].filter(Boolean).join(' / ');
       case 'bar': case 'pie': return '전체를 똑같이 ' + a[1] + '칸으로 나눈 ' + (v[0] === 'pie' ? '원' : '막대') + ' 그림에서 ' + a[0] + '칸이 색칠되어 있음' + (a[0] > a[1] ? ' (막대가 여러 개)' : '');
       case 'bars2': return '위 막대는 ' + a[1] + '칸 중 ' + a[0] + '칸, 아래 막대는 ' + a[3] + '칸 중 ' + a[2] + '칸이 색칠되어 있음';
       case 'dots': return '점 ' + a[0] + '개를 ' + a[1] + '묶음으로 똑같이 나눈 그림' + (a[2] ? ' (' + a[2] + '묶음 색칠)' : '') + (a[3] ? ', 묶음 밖에 남은 점 ' + a[3] + '개' : '');
