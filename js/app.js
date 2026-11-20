@@ -323,7 +323,7 @@
   function diagIntro() {
     const name = esc(E.state().name);
     view('<div class="hero">' + dog(72) + '<div><h1>어디서부터 시작할까?</h1><div class="sub">' + name + '에게 딱 맞는 출발점 찾기</div></div></div>' +
-      '<div class="card"><h2>이건 시험이 아니야</h2><ul class="plan"><li>점수를 매기지 않아. <b>어디서부터 공부하면 좋을지</b> 찾는 거야.</li><li>모르는 문제는 찍지 말고 <b>"모르겠어요"</b>를 눌러. 그래야 딱 맞는 곳에서 시작할 수 있어.</li><li>맞았는지 틀렸는지는 알려 주지 않고 바로 다음 문제로 넘어가.</li><li>25~50문제쯤이야. 중간에 ✕ 를 눌러 쉬었다가 이어서 해도 돼.</li><li>연습장과 연필을 준비하면 좋아!</li></ul><button class="btn" id="go">준비됐어!</button></div>');
+      '<div class="card"><h2>이건 시험이 아니야</h2><ul class="plan"><li>점수를 매기지 않아. <b>어디서부터 공부하면 좋을지</b> 찾는 거야.</li><li>모르는 문제는 찍지 말고 <b>"모르겠어요"</b>를 눌러. 그래야 딱 맞는 곳에서 시작할 수 있어.</li><li><b>아직 학교에서 안 배운 문제</b>도 섞여 있어. 그런 문제는 몰라도 당연하니까 걱정하지 마.</li><li>맞았는지 틀렸는지는 알려 주지 않고 바로 다음 문제로 넘어가.</li><li>문제 수는 사람마다 달라. 20~60문제쯤이고, 아는 게 많을수록 더 많이 나와. 중간에 ✕ 를 눌러 쉬었다가 이어서 해도 돼.</li><li>연습장과 연필을 준비하면 좋아!</li></ul><button class="btn" id="go">준비됐어!</button></div>');
     on('#go', () => { if (!E.state().diag) E.diagStart(); diagLoop(); });
   }
 
@@ -376,7 +376,7 @@
         (set ? '<li><b>' + (E.sk(set.id).sets ? '이어서' : '새 공부') + '</b> ' + M.byId[set.id].name + ' ' + stars(E.sk(set.id).stars) + ' <span class="mute">(' + E.SET_N + '문제)</span></li>' : '');
       body = '<div class="card"><h2>' + (done ? '오늘 공부 끝! 대단해 👏' : '오늘의 공부') + '</h2>' +
         (steps.length ? (done ? '<p>더 하고 싶으면 한 세트 더 해도 좋아.</p>' : '') + '<ul class="plan">' + items + '</ul><button class="btn ' + (done ? 'sub' : '') + '" id="start">' + (done ? '한 세트 더 하기' : '시작하기 ▶') + '</button>'
-          : '<p>모든 단원을 끝냈고, 오늘은 복습할 것도 없어. 내일 또 만나!</p>') + '</div>';
+          : '<p>모든 단원을 끝냈고, 오늘은 복습할 것도 없어. 더 하고 싶으면 아래 <b>단원 지도</b>에서 단원을 골라 연습해도 좋아.</p>') + '</div>';
     }
     view('<div class="hero">' + dog(72) + '<div style="flex:1"><h1>안녕, ' + esc(S.name) + '!</h1><div class="chips"><span class="chip">Lv.' + lv.lv + '</span><span class="chip">🔥 ' + streak + '일 연속</span><span class="chip">★ ' + c.done + ' / ' + c.total + '</span>' + netChip + '<button class="chip link" id="swap">👥 사람 바꾸기</button></div><div class="xpbar"><i style="width:' + Math.round(lv.cur / lv.need * 100) + '%"></i></div></div></div>' +
       pickCard + body + '<button class="btn sub" id="askfree" style="margin-bottom:16px">🙋 멍멍이 선생님께 질문하기</button>' +
@@ -570,7 +570,7 @@
     view('<div class="top"><button class="x" id="back">←</button><span class="lbl" style="font-size:18px">부모님 보기</span></div>' +
       '<div class="card"><h2>' + esc(S.name) + '의 공부 요약</h2><div class="kv"><div><b>' + c.done + ' / ' + c.total + '</b><span>끝낸 단원</span></div><div><b>' + days7 + '일</b><span>최근 7일 공부한 날</span></div><div><b>' + (n7 ? Math.round(ok7 / n7 * 100) + '%' : '-') + '</b><span>최근 7일 정답률</span></div></div>' +
       '<p>' + (S.diagDone ? (cur ? '지금 배우는 곳: <b>' + gradeName(M.byId[cur].grade) + ' · ' + M.byId[cur].name + '</b>' : '모든 단원을 끝냈어요.') : '아직 출발점 찾기(진단)를 끝내지 않았어요.') + '</p>' +
-      (lowest ? '<p class="mute">진단에서 처음 막힌 곳은 <b>' + gradeName(lowest.grade) + ' ' + lowest.name + '</b>이에요. 6학년 내용이 어려운 것은 대개 이 아래 학년의 빈틈 때문이라, 앱은 여기서부터 차례로 채워 올라갑니다.</p>' : '') +
+      (lowest ? '<p class="mute">진단에서 처음 막힌 곳은 <b>' + gradeName(lowest.grade) + ' ' + lowest.name + '</b>이에요. 수학은 아래 단원이 위 단원의 바탕이 되기 때문에, 앱은 여기서부터 차례로 채워 올라갑니다. 아직 학교에서 배우지 않은 단원이라면 빈틈이 아니라 미리 배우는 것입니다.</p>' : '') +
       '<p class="mute">최근 7일: ' + n7 + '문제, 약 ' + Math.round(sec7 / 60) + '분</p></div>' +
 
       '<div class="card"><h2>단원별 상태</h2><p class="mute"><span class="sk done">★ 끝냄</span><span class="sk est">○ 진단에서 아는 것으로 봄 (확인 예정)</span><span class="sk going">▶ 배우는 중</span><span class="sk none">· 아직</span></p><table>' + strands + '</table></div>' +
@@ -581,7 +581,7 @@
 
       '<div class="card"><h2>최근 틀린 문제</h2>' + (wrong || '<p class="mute">아직 없어요.</p>') + '</div>' +
 
-      '<div class="card"><h2>이렇게 도와주세요</h2><ul class="plan tips"><li><b>매일 15분</b>이 주 1회 2시간보다 훨씬 효과적입니다. 같은 시간에 하도록 정해 주세요.</li><li>점수보다 <b>"어제 못 하던 걸 오늘 했다"</b>를 칭찬해 주세요. 15점은 머리가 나빠서가 아니라 앞 학년의 빈틈이 쌓인 결과입니다.</li><li>틀린 문제는 답을 알려 주기보다 <b>"어떻게 생각했어?"</b>라고 물어봐 주세요. 어디서 헷갈렸는지가 드러납니다.</li><li>아래 학년 내용부터 시작해도 아이가 창피해하지 않도록, <b>"기초 공사 중"</b>이라고 말해 주세요.</li><li>연습장에 직접 써서 풀도록 해 주세요. 암산으로만 하면 실수가 줄지 않습니다.</li></ul></div>' +
+      '<div class="card"><h2>이렇게 도와주세요</h2><ul class="plan tips"><li><b>매일 15분</b>이 주 1회 2시간보다 훨씬 효과적입니다. 같은 시간에 하도록 정해 주세요.</li><li>점수보다 <b>"어제 못 하던 걸 오늘 했다"</b>를 칭찬해 주세요. 낮은 점수는 머리가 나빠서가 아니라 앞 단원의 빈틈이 쌓인 결과입니다.</li><li>틀린 문제는 답을 알려 주기보다 <b>"어떻게 생각했어?"</b>라고 물어봐 주세요. 어디서 헷갈렸는지가 드러납니다.</li><li>아래 학년 내용부터 시작해도 아이가 창피해하지 않도록, <b>"기초 공사 중"</b>이라고 말해 주세요.</li><li>연습장에 직접 써서 풀도록 해 주세요. 암산으로만 하면 실수가 줄지 않습니다.</li></ul></div>' +
 
       '<div class="card"><h2>선생님께 한 질문</h2><p class="mute">아이가 "질문하기"를 누르면 집 컴퓨터의 Claude Code가 답합니다. 집 컴퓨터가 켜져 있을 때만 되고, 주고받은 내용은 여기에 남습니다.' + (net.status === 'on' ? ' 오늘 남은 질문 횟수: ' + net.tutor.left + '번' : '') + '</p>' + (asks || '<p class="mute">아직 없어요.</p>') + '</div>' +
 
