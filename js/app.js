@@ -89,7 +89,7 @@
       frame(o,
         '<div class="card q"><div class="tag">' + sk.name + '</div><div class="qtext">' + J(p.q) + '</div>' +
         (p.v ? '<div class="qvis">' + V.draw(p.v) + '</div>' : '') +
-        (p.a.c ? '<div class="choices">' + p.a.c.map((c, i) => '<button class="choice" data-c="' + i + '"></button>').join('') + '</div>' : '<div class="ansrow">' + ans.html + '</div>') +
+        (p.a.c ? '<div class="choices' + (p.a.c.some(c => String(c).length > 3) ? ' txt' : '') + '">' + p.a.c.map((c, i) => '<button class="choice" data-c="' + i + '"></button>').join('') + '</div>' : '<div class="ansrow">' + ans.html + '</div>') +
         '</div><div id="fb"></div><div id="padwrap">' +
         (p.a.c ? '' : '<div class="pad">' + ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'].map(k => '<button data-k="' + k + '">' + k + '</button>').join('') + '</div>') +
         '<div class="acts"><button class="btn sub" id="dunno">모르겠어요</button>' + (ctx.n > 1 ? '<button class="btn sub" id="nextbox">다음 칸 →</button>' : '') + (p.a.c ? '' : '<button class="btn go ok" id="go">확인</button>') + '</div></div>');

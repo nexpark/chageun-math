@@ -91,6 +91,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .choice { min-width: 72px; padding: 12px 18px; font-size: 26px; font-weight: 800; background: #fff; border: 3px solid var(--line); box-shadow: 4px 4px 0 var(--line); }
 .choice:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--line); }
 .choice.sel { background: var(--soft); }
+/* 글로 된 보기(식 · 범위)는 작은 글씨로 두 줄에 둘씩 */
+.choices.txt .choice { font-size: 20px; padding: 12px 10px; min-width: 44%; }
 
 /* 숫자판 */
 .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }

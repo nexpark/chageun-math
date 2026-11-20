@@ -144,11 +144,12 @@
     { id: 'dec', name: '소수', mode: 'bin', start: 1, ids: ['decmean', 'decadd', 'fracdec', 'decmul', 'decdiv'] },
     { id: 'ratio', name: '비와 비율', mode: 'bin', start: 0, ids: ['ratio', 'percent', 'prop'] },
     { id: 'geo', name: '도형과 평균', mode: 'lin', start: 0, ids: ['rect', 'triarea', 'avg', 'volume', 'circle'] },
+    { id: 'pat', name: '규칙과 어림', mode: 'lin', start: 0, ids: ['corr', 'range', 'round'] },
   ];
-  // 배우는 순서
+  // 배우는 순서 (교과서 차례를 따른다: 규칙과 대응은 5-1 약수와 배수 다음, 수의 범위와 어림하기는 5-2 첫 단원)
   M.ORDER = ['add3', 'sub3', 'times', 'mul21', 'div1', 'fracmean', 'fraccmp1', 'mul22', 'divrem', 'decmean', 'fracconv',
-    'div2', 'fracadd1', 'decadd', 'order', 'factors', 'gcd', 'lcm', 'equiv', 'common', 'fracdec', 'fracadd2', 'rect',
-    'triarea', 'fracmul', 'decmul', 'avg', 'fracdiv', 'decdiv', 'ratio', 'percent', 'volume', 'prop', 'circle'];
+    'div2', 'fracadd1', 'decadd', 'order', 'factors', 'gcd', 'lcm', 'corr', 'equiv', 'common', 'fracdec', 'fracadd2', 'rect',
+    'triarea', 'range', 'round', 'fracmul', 'decmul', 'avg', 'fracdiv', 'decdiv', 'ratio', 'percent', 'volume', 'prop', 'circle'];
 
   g.M = M;
   if (typeof module !== 'undefined') module.exports = M;

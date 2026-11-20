@@ -1,4 +1,4 @@
-// 그림: 분수 막대 · 원 · 점 묶음 · 수직선 · 세로셈 · 도형
+// 그림: 분수 막대 · 원 · 점 묶음 · 수직선 · 세로셈 · 도형 · 대응표 · 수의 범위
 (function (g) {
   'use strict';
   const V = {};
@@ -144,6 +144,43 @@
       txt(x + W / 2, y + H + 22, la) + txt(x + W + dx / 2 + 14, y + H - dy / 2 + 14, lb, { anchor: 'start', size: 13 }) + txt(x - 8, y + H / 2 + 5, lc, { anchor: 'end' }));
   };
 
+  // 대응표: 위 줄(la)과 아래 줄(lb)의 짝. 값이 '?' 인 칸은 노랗게
+  V.table = function (la, lb, xs, ys) {
+    const tw = s => String(s).split('').reduce((a, c) => a + (c.charCodeAt(0) > 0x2E80 ? 13 : 7.5), 0);
+    const lw = Math.max(70, Math.min(124, 14 + Math.max(tw(la), tw(lb)))), H = 36, cw = (296 - lw) / xs.length;
+    let b = '';
+    [[la, xs], [lb, ys]].forEach(([label, vals], r) => {
+      const y = 2 + r * H;
+      b += '<rect x="2" y="' + y + '" width="' + lw + '" height="' + H + '" fill="' + SOFT + '" stroke="' + INK + '" stroke-width="2"/>' + txt(2 + lw / 2, y + H / 2 + 5, label, { size: 13 });
+      vals.forEach((v, i) => {
+        const x = 2 + lw + i * cw, q = v === '?';
+        b += '<rect x="' + x + '" y="' + y + '" width="' + cw + '" height="' + H + '" fill="' + (q ? '#ffd23f' : PAPER) + '" stroke="' + INK + '" stroke-width="2"/>' + txt(x + cw / 2, y + H / 2 + 5, v, { size: String(v).length > 3 ? 12 : 15 });
+      });
+    });
+    return svg(300, 2 * H + 4, b);
+  };
+
+  // 수의 범위: lo~hi 수직선(한 칸에 1)에 a 부터 b 까지 표시. a 나 b 가 null 이면 그쪽으로 끝없이 뻗는다
+  // ia · ib: 끝의 수가 들어가는가 (들어가면 색칠한 점 ●, 아니면 빈 점 ○)
+  V.range = function (lo, hi, a, b, ia, ib) {
+    const x0 = 26, x1 = 274, y = 46, up = y - 20, X = v => x0 + (v - lo) / (hi - lo) * (x1 - x0), wide = String(hi).length > 2;
+    let s = '<line x1="' + (x0 - 14) + '" y1="' + y + '" x2="' + (x1 + 14) + '" y2="' + y + '" stroke="' + INK + '" stroke-width="2.5"/>';
+    for (let v = lo; v <= hi; v++) {
+      const end = v === a || v === b;
+      s += '<line x1="' + X(v) + '" y1="' + (y - 6) + '" x2="' + X(v) + '" y2="' + (y + 6) + '" stroke="' + INK + '" stroke-width="2"/>' +
+        txt(X(v), y + 24, v, end ? { size: wide ? 13 : 15 } : { size: wide ? 10 : 12, fill: '#6a6f94' });
+    }
+    const xa = a == null ? x0 - 14 : X(a), xb = b == null ? x1 + 14 : X(b);
+    const pts = (a == null ? [] : [[xa, y]]).concat([[xa, up], [xb, up]], b == null ? [] : [[xb, y]]).map(p => p.join(',')).join(' ');
+    s += '<polyline points="' + pts + '" fill="none" stroke="' + FILL + '" stroke-width="5" stroke-linejoin="round"/>';
+    if (a == null) s += '<polygon points="' + [[xa - 9, up], [xa + 1, up - 7], [xa + 1, up + 7]].map(p => p.join(',')).join(' ') + '" fill="' + FILL + '"/>';
+    if (b == null) s += '<polygon points="' + [[xb + 9, up], [xb - 1, up - 7], [xb - 1, up + 7]].map(p => p.join(',')).join(' ') + '" fill="' + FILL + '"/>';
+    const dot = (x, inc) => '<circle cx="' + x + '" cy="' + y + '" r="6.5" fill="' + (inc ? FILL : PAPER) + '" stroke="' + INK + '" stroke-width="2.5"/>';
+    if (a != null) s += dot(xa, ia);
+    if (b != null) s += dot(xb, ib);
+    return svg(300, 78, s);
+  };
+
   // 그림을 말로 (선생님께 질문할 때 그림 내용을 넘기는 데 쓴다)
   V.describe = function (v) {
     if (!v) return '';
@@ -161,6 +198,8 @@
       case 'trap': return '사다리꼴 그림 (윗변 ' + a[3] + ', 아랫변 ' + a[4] + ', 높이 ' + a[5] + ')';
       case 'circ': return '원 그림 (' + (a[0] === 'r' ? '반지름 ' : '지름 ') + a[1] + ')';
       case 'box': return '직육면체 그림 (가로 ' + a[0] + ', 세로 ' + a[1] + ', 높이 ' + a[2] + ')';
+      case 'table': return '두 줄짜리 표. 윗줄 ' + a[0] + ': ' + a[2].join(', ') + ' / 아랫줄 ' + a[1] + ': ' + a[3].join(', ') + ' (위아래 칸이 서로 짝)';
+      case 'range': return a[0] + '부터 ' + a[1] + '까지 눈금이 있는 수직선에 "' + [a[2] == null ? '' : a[2] + (a[4] ? ' 이상' : ' 초과'), a[3] == null ? '' : a[3] + (a[5] ? ' 이하' : ' 미만')].filter(Boolean).join(' ') + '"인 범위가 굵은 선으로 표시됨 (색칠한 점은 그 수가 들어감, 빈 점은 들어가지 않음)';
       default: return '';
     }
   };
